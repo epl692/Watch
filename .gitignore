@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 doc
 modinit.c
 drivers/rtca_now.h
@@ -17,3 +18,28 @@ output.map
 # Ignore NetBeans stuff
 nbproject/
 cscope.out
+=======
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+
+# Libraries
+*.lib
+*.a
+
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+>>>>>>> 4457773c6bc94ccb0560a6fc7111c0d867d63d09
