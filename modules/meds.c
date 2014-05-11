@@ -29,6 +29,7 @@
 int med_alert = 0;
 int prn = 0;
 int prn_effects = 0;
+uint8_t prn_time = 0;
 uint8_t prn_cooldown = CONFIG_MOD_MEDS_PRN_COOLDOWN;
 uint8_t am_hour = CONFIG_MOD_MEDS_AM;
 uint8_t pm_hour = CONFIG_MOD_MEDS_PM;
@@ -36,11 +37,15 @@ uint8_t am_minute = CONFIG_MOD_MEDS_AM_MIN;
 uint8_t pm_minute = CONFIG_MOD_MEDS_PM_MIN;
 uint8_t bed_hour = CONFIG_MOD_MEDS_BED;
 uint8_t bed_minute = CONFIG_MOD_MEDS_BED_MIN;
-static uint8_t tmp_hh, tmp_mm, prn_hh, prn_mm, prn_effect_hh, prn_effect_mm;
+static uint8_t tmp_hh, tmp_mm; //, prn_hh, prn_mm, prn_effect_hh, prn_effect_mm;
 
-void med_check();
+//Prototypes
+void med_tick();
 void alarmCheck(uint8_t hour, uint8_t minute);
-
+void prn_set(uint8_t);
+void prn_tick();
+void med_chimeTick();
+void med_chime();
 
 static void num_press()
 {
@@ -60,10 +65,13 @@ static void prn_press()
 	display_clear(0, 2);
 	display_chars(0, LCD_SEG_L2_4_0, "PRN", SEG_ON);
 	display_symbol(0, LCD_ICON_HEART, SEG_ON);
-	prn_hh = (rtca_time.hour + prn_cooldown) % 24;
-	prn_mm = rtca_time.min;
-    prn_effect_hh = rtca_time.hour;
-    prn_effect_mm = rtca_time.min + 12;
+    prn_set(prn_cooldown * 60); //prn_cooldown in hours, prn_set is in minutes. Convert!
+}
+
+static void prn_check()
+{
+  			_printf(0, LCD_SEG_L1_3_0, "%u", prn_time);
+			//_printf(0, LCD_SEG_L2_3_2, "%02u", (prn_time % 60));
 }
 
 static void meds_activate()
@@ -78,78 +86,86 @@ static void meds_deactivate()
 
 void mod_meds_init(void)
 {
-	sys_messagebus_register(med_check, SYS_MSG_RTC_MINUTE);	
-	menu_add_entry("MEDS", &prn_press, NULL, &num_press, NULL, NULL, NULL,
+	sys_messagebus_register(med_tick, SYS_MSG_RTC_MINUTE);	
+	menu_add_entry("MEDS", &prn_press, &prn_check, &num_press, NULL, NULL, NULL,
 						&meds_activate,
 						&meds_deactivate);
 }
 
-void med_check()
+void med_tick()
 {
 	tmp_hh = rtca_time.hour;
 	tmp_mm = rtca_time.min;
-	
-	if(tmp_hh == prn_hh && tmp_mm == prn_mm)
-	{
-	    prn = 0;
-	    display_symbol(0, LCD_ICON_HEART, SEG_OFF);
-	}
-	
-	if(prn == 1)
-	{
-	    	    display_symbol(0, LCD_ICON_HEART, SEG_ON);
-	    	    if (prn_effects == 1)
-	    	    {
-	    	        display_symbol(0, LCD_ICON_HEART, BLINK_ON);
-	    	    } else {
-	    	        display_symbol(0, LCD_ICON_HEART, BLINK_OFF);
-	    	    }
-	} else {
-	    display_symbol(0, LCD_ICON_HEART, BLINK_OFF);
-	    display_symbol(0, LCD_ICON_HEART, SEG_OFF);
-	}
-	
-	
-	if(tmp_hh == prn_effect_hh && tmp_mm == prn_effect_mm)
-	{
-	    prn_effects = 0;
-	}
-	
-/*	if(tmp_hh == am_hour && tmp_mm == pm_minute)
-		{
-			med_alert = 1;
-		}
 
-	if(tmp_hh == pm_hour && tmp_mm == pm_minute)
-		{
-			med_alert = 1;
-		}
+    //Track the PRN usage.
+    prn_tick();
+	
+    //Moring Meds
+    #ifdef CONFIG_MOD_MEDS_AM_ACTIVE
+        alarmCheck(am_hour, am_minute);
+    #endif
 
-	if(tmp_hh == bed_hour && tmp_mm == bed_minute)
-		{
-			med_alert = 1;
-		}
-*/
+    //Evening Meds
+    #ifdef CONFIG_MOD_MEDS_PM_ACTIVE
+        alarmCheck(pm_hour, pm_minute);
+    #endif
 
-    alarmCheck(am_hour, am_minute);
-    alarmCheck(pm_hour, pm_minute);
-    alarmCheck(bed_hour, bed_minute);
+    //Bedtime Meds
+    #ifdef CONFIG_MOD_MEDS_BED_ACTIVE
+        alarmCheck(bed_hour, bed_minute);
+    #endif
 
-	if(med_alert == 1)
+        med_chimeTick();
+}
+
+void med_chimeTick()
+{
+    	if(med_alert == 1)
 		{
 			display_symbol(0, LCD_ICON_ALARM, SEG_ON);
 			if((tmp_mm % 10) == 0)
 			{
-			    	/* Play "welcome" chord: A major */
-	                note welcome[4] = {0x1901, 0x1904, 0x1908, 0x000F};
-	                buzzer_play(welcome);
-
+				med_chime();
 			}
 		} else {
 			display_symbol(0, LCD_ICON_ALARM, SEG_OFF);
 		}
+
 }
 
+void prn_set(uint8_t minutes)
+{
+    prn_time = minutes;
+    prn = 1;
+    display_symbol(0, LCD_ICON_HEART, SEG_ON);
+}
+
+void prn_tick()
+{
+    //Do this if we have a prn in our system.
+    if(prn == 1)
+    {
+        prn_time = prn_time - 1;
+    }
+    
+    if(prn_time <= 0)
+    {
+        prn = 0;
+    }
+    
+    if(prn == 1)
+    {
+        	    display_symbol(0, LCD_ICON_HEART, SEG_ON);
+    } else {
+        	    display_symbol(0, LCD_ICON_HEART, SEG_OFF);
+    }
+}
+
+void med_chime()
+{
+	note chime[4] = {0x1901, 0x1904, 0x1908, 0x000F};
+	buzzer_play(chime);
+}
 
 void alarmCheck(uint8_t hour, uint8_t minute)
 {
